@@ -208,6 +208,8 @@ class CacheOpenAI(BaseLLM):
 
 				response = client.chat.completions.create(**params)
 
+				break
+
 			except Exception as e:
 				# print("Error, retrying in 5 seconds", str(e))
 
