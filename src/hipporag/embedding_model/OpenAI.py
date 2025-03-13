@@ -85,8 +85,20 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
 		logger.debug(f"Calling {self.__class__.__name__} with:\n{params}")
 		texts = [t.replace("\n", " ") for t in texts]
 
-		response = self.client.embeddings.create(input=texts, model=self.embedding_model_name)
-		results = np.array([v.embedding for v in response.data])
+		assert all(len(t) > 0 for t in texts)  # embeddings.create throws Exception on empty string
+		# assert all(len(tokenizer.encode(x)) <= 8192 for x in texts)
+
+		batch_size = 800
+
+		batches = np.array_split(texts, 1 + (len(texts) // batch_size))
+
+		results = []
+
+		for batch in batches:
+			results.extend(np.array([e.embedding for e in self.client.embeddings.create(input=batch, model=self.embedding_model_name).data]))
+		
+		results = np.array(results)
+		# results = np.array([v.embedding for v in response.data])
 
 		if isinstance(results, torch.Tensor):
 			results = results.cpu()
