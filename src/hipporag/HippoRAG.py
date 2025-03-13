@@ -137,29 +137,26 @@ class HippoRAG:
 
 
     def initialize_graph(self):
-        """
-        Initializes a graph using a GraphML file if available or creates a new graph.
-
-        The function attempts to load a pre-existing graph stored in a GraphML file. If the file
-        is not present or the graph needs to be created from scratch, it initializes a new directed
-        or undirected graph based on the global configuration. If the graph is loaded successfully
-        from the file, pertinent information about the graph (number of nodes and edges) is logged.
-
-        Returns:
-            ig.Graph: A pre-loaded or newly initialized graph.
-
-        Raises:
-            None
-        """
+        """Initialize the graph and load related data structures"""
         self._graphml_xml_file = os.path.join(
             self.working_dir, f"graph.graphml"
         )
-
+        
         preloaded_graph = None
+        self.ent_node_to_num_chunk = {}
 
         if not self.global_config.force_index_from_scratch:
+            # Try to load graph
             if os.path.exists(self._graphml_xml_file):
                 preloaded_graph = ig.Graph.Read_GraphML(self._graphml_xml_file)
+                
+                # Try to load ent_node_to_num_chunk
+                ent_node_file = os.path.join(self.working_dir, "ent_node_to_num_chunk.json")
+                if os.path.exists(ent_node_file):
+                    with open(ent_node_file, 'r') as f:
+                        self.ent_node_to_num_chunk = json.load(f)
+                else:
+                    logger.warning("Entity node to chunk mapping file not found. Will rebuild during indexing.")
 
         if preloaded_graph is None:
             return ig.Graph(directed=self.global_config.is_directed_graph)
@@ -798,11 +795,18 @@ class HippoRAG:
         )
 
     def save_igraph(self):
-        logger.info(
-            f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges"
-        )
+        """Save the graph and related data structures"""
+        logger.info(f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges")
+        
+        # Save the graph
         self.graph.write_graphml(self._graphml_xml_file)
-        logger.info(f"Saving graph completed!")
+        
+        # Save ent_node_to_num_chunk dictionary
+        ent_node_file = os.path.join(self.working_dir, "ent_node_to_num_chunk.json")
+        with open(ent_node_file, 'w') as f:
+            json.dump(self.ent_node_to_num_chunk, f)
+        
+        logger.info(f"Saving graph and related data completed!")
 
     def get_graph_info(self) -> Dict:
         """

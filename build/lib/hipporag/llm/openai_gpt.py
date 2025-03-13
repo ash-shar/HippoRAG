@@ -21,6 +21,8 @@ from .base import BaseLLM, LLMConfig
 
 from openai import AzureOpenAI
 
+import time
+
 logger = get_logger(__name__)
 
 def cache_response(func):
@@ -54,48 +56,48 @@ def cache_response(func):
 		lock_file = self.cache_file_name + ".lock"
 
 		# Try to read from SQLite cache
-		# with FileLock(lock_file):
-		# 	conn = sqlite3.connect(self.cache_file_name)
-		# 	c = conn.cursor()
-		# 	# if the table does not exist, create it
-		# 	c.execute("""
-		# 		CREATE TABLE IF NOT EXISTS cache (
-		# 			key TEXT PRIMARY KEY,
-		# 			message TEXT,
-		# 			metadata TEXT
-		# 		)
-		# 	""")
-		# 	conn.commit()  # commit to save the table creation
-		# 	c.execute("SELECT message, metadata FROM cache WHERE key = ?", (key_hash,))
-		# 	row = c.fetchone()
-		# 	conn.close()
-		# 	if row is not None:
-		# 		message, metadata_str = row
-		# 		metadata = json.loads(metadata_str)
-		# 		# return cached result and mark as hit
-		# 		return message, metadata, True
+		with FileLock(lock_file):
+			conn = sqlite3.connect(self.cache_file_name)
+			c = conn.cursor()
+			# if the table does not exist, create it
+			c.execute("""
+				CREATE TABLE IF NOT EXISTS cache (
+					key TEXT PRIMARY KEY,
+					message TEXT,
+					metadata TEXT
+				)
+			""")
+			conn.commit()  # commit to save the table creation
+			c.execute("SELECT message, metadata FROM cache WHERE key = ?", (key_hash,))
+			row = c.fetchone()
+			conn.close()
+			if row is not None:
+				message, metadata_str = row
+				metadata = json.loads(metadata_str)
+				# return cached result and mark as hit
+				return message, metadata, True
 
 		# if cache miss, call the original function to get the result
 		result = func(self, *args, **kwargs)
 		message, metadata = result
 
 		# insert new result into cache
-		# with FileLock(lock_file):
-		# 	conn = sqlite3.connect(self.cache_file_name)
-		# 	c = conn.cursor()
-		# 	# make sure the table exists again (if it doesn't exist, it would be created)
-		# 	c.execute("""
-		# 		CREATE TABLE IF NOT EXISTS cache (
-		# 			key TEXT PRIMARY KEY,
-		# 			message TEXT,
-		# 			metadata TEXT
-		# 		)
-		# 	""")
-		# 	metadata_str = json.dumps(metadata)
-		# 	c.execute("INSERT OR REPLACE INTO cache (key, message, metadata) VALUES (?, ?, ?)",
-		# 			  (key_hash, message, metadata_str))
-		# 	conn.commit()
-		# 	conn.close()
+		with FileLock(lock_file):
+			conn = sqlite3.connect(self.cache_file_name)
+			c = conn.cursor()
+			# make sure the table exists again (if it doesn't exist, it would be created)
+			c.execute("""
+				CREATE TABLE IF NOT EXISTS cache (
+					key TEXT PRIMARY KEY,
+					message TEXT,
+					metadata TEXT
+				)
+			""")
+			metadata_str = json.dumps(metadata)
+			c.execute("INSERT OR REPLACE INTO cache (key, message, metadata) VALUES (?, ?, ?)",
+					  (key_hash, message, metadata_str))
+			conn.commit()
+			conn.close()
 
 		return message, metadata, False
 
@@ -169,7 +171,18 @@ class CacheOpenAI(BaseLLM):
 			# TODO strange version change in openai protocol, but our current vllm version not changed yet
 			params['max_tokens'] = params.pop('max_completion_tokens')
 
-		response = self.openai_client.chat.completions.create(**params)
+		MAX_TRIES = 5
+
+		curr_tries = 1
+
+
+		while curr_tries <= MAX_TRIES:
+			try:
+				response = self.openai_client.chat.completions.create(**params)
+			except Exception as e:
+				print("Error, retrying in 5 seconds", str(e))
+				time.sleep(5*curr_tries)
+				curr_tries += 1
 
 		response_message = response.choices[0].message.content
 

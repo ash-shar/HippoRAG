@@ -20,6 +20,7 @@ from ..utils.logging_utils import get_logger
 from .base import BaseLLM, LLMConfig
 
 from openai import AzureOpenAI
+import numpy as np
 
 import time
 
@@ -131,14 +132,37 @@ class CacheOpenAI(BaseLLM):
 		else:
 			client = None
 
-		api_key = os.getenv("OPENAI_API_KEY")
+		api_key = os.getenv("AOAI_EAST_US_KEY") if api_key is None else api_key
 		
 		self.openai_client = AzureOpenAI(
 								# this is the AOAI-east-us endpoint
 								azure_endpoint = os.getenv("AOAI_EAST_US_ENDPOINT"),
 								api_key = api_key,
 								api_version="2024-10-21"
-							)		
+							)
+		
+		self.openai_client_1 = AzureOpenAI(
+				# this is the AOAI-east-us endpoint
+			azure_endpoint = os.getenv('AOAI_EAST_US_ENDPOINT'),
+			api_key = os.getenv('AOAI_EAST_US_KEY'),
+			api_version="2024-10-21"
+		)
+
+		self.openai_client_2 = AzureOpenAI(
+				# this is the AOAI-east-us endpoint
+			azure_endpoint = os.getenv('AOAI_EAST_US_2_ENDPOINT'), 
+			api_key = os.getenv('AOAI_EAST_US_2_KEY'),
+			api_version="2024-10-21"
+		)
+
+		self.openai_client_3 = AzureOpenAI(
+				# this is the AOAI-east-us endpoint
+			azure_endpoint = os.getenv('AOAI_SWEDEN_CENTRAL_ENDPOINT'), 
+			api_key = os.getenv('AOAI_SWEDEN_CENTRAL_KEY'),
+			api_version="2024-10-21"
+		)
+
+		self.openai_clients = [self.openai_client_1, self.openai_client_2, self.openai_client_3]
 
 	def _init_llm_config(self, **kwargs) -> None:
 		config_dict = {
@@ -175,14 +199,24 @@ class CacheOpenAI(BaseLLM):
 
 		curr_tries = 1
 
+		response = None
+
 
 		while curr_tries <= MAX_TRIES:
 			try:
-				response = self.openai_client.chat.completions.create(**params)
+				client = np.random.choice(self.openai_clients)
+
+				response = client.chat.completions.create(**params)
+
 			except Exception as e:
-				print("Error, retrying in 5 seconds", str(e))
+				# print("Error, retrying in 5 seconds", str(e))
+
 				time.sleep(5*curr_tries)
+				
 				curr_tries += 1
+
+		if response is None:
+			print('Error, all tries failed...')
 
 		response_message = response.choices[0].message.content
 
