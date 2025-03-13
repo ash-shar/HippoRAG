@@ -1,5 +1,5 @@
 ner_system = """Your task is to extract named entities from the given paragraph. 
-Respond with a JSON list of entities.
+Respond with a JSON list of entities. Example output: {"named_entities":\n    ["entity 1", "entity 2"]\n}\n \n
 """
 
 one_shot_ner_paragraph = """Radio City
